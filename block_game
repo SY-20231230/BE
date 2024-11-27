@@ -1,0 +1,214 @@
+import pygame
+import random
+
+# 게임 초기화
+pygame.init()
+
+# 화면 설정
+SCREEN_WIDTH = 800
+SCREEN_HEIGHT = 600
+screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+pygame.display.set_caption("벽돌깨기 게임")
+
+# 색상 정의
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
+RED = (255, 0, 0)
+BLUE = (0, 0, 255)
+BRICK_COLORS = [
+    (200, 50, 50),   # 붉은 계열
+    (50, 100, 200),  # 파란 계열
+    (50, 200, 100),  # 초록 계열
+]
+
+# 게임 객체 클래스들
+class Ball:
+    def __init__(self):
+        self.radius = 10
+        self.x = SCREEN_WIDTH // 2
+        self.y = SCREEN_HEIGHT - 100
+        self.dx = random.choice([-5, -4, 4, 5])
+        self.dy = -5
+        self.color = WHITE
+
+    def move(self):
+        self.x += self.dx
+        self.y += self.dy
+
+    def draw(self, screen):
+        pygame.draw.circle(screen, self.color, (int(self.x), int(self.y)), self.radius)
+
+    def bounce_x(self):
+        self.dx *= -1
+
+    def bounce_y(self):
+        self.dy *= -1
+
+class Paddle:
+    def __init__(self):
+        self.width = 100
+        self.height = 15
+        self.x = (SCREEN_WIDTH - self.width) // 2
+        self.y = SCREEN_HEIGHT - 50
+        self.speed = 0
+        self.color = BLUE
+
+    def move(self):
+        self.x += self.speed
+        
+        # 화면 경계 제한
+        if self.x < 0:
+            self.x = 0
+        elif self.x > SCREEN_WIDTH - self.width:
+            self.x = SCREEN_WIDTH - self.width
+
+    def draw(self, screen):
+        pygame.draw.rect(screen, self.color, (self.x, self.y, self.width, self.height))
+
+class Brick:
+    def __init__(self, x, y):
+        self.width = 80
+        self.height = 30
+        self.x = x
+        self.y = y
+        self.color = random.choice(BRICK_COLORS)
+        self.alive = True
+
+    def draw(self, screen):
+        if self.alive:
+            pygame.draw.rect(screen, self.color, (self.x, self.y, self.width, self.height))
+
+# 게임 메인 클래스
+class BrickBreaker:
+    def __init__(self):
+        self.screen = screen
+        self.clock = pygame.time.Clock()
+        self.font = pygame.font.Font(None, 36)
+        self.reset_game()
+
+    def reset_game(self):
+        self.ball = Ball()
+        self.paddle = Paddle()
+        self.score = 0
+        self.lives = 3
+        self.create_bricks()
+
+    def create_bricks(self):
+        self.bricks = []
+        rows, cols = 5, 10
+        brick_width = 80
+        brick_height = 30
+        padding = 10
+        
+        for row in range(rows):
+            for col in range(cols):
+                x = col * (brick_width + padding) + padding
+                y = row * (brick_height + padding) + 50
+                self.bricks.append(Brick(x, y))
+
+    def handle_events(self):
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return False
+            
+            # 패들 움직임 제어
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_LEFT:
+                    self.paddle.speed = -7
+                if event.key == pygame.K_RIGHT:
+                    self.paddle.speed = 7
+            
+            if event.type == pygame.KEYUP:
+                if event.key in [pygame.K_LEFT, pygame.K_RIGHT]:
+                    self.paddle.speed = 0
+
+        return True
+
+    def check_collisions(self):
+        # 벽과 충돌
+        if self.ball.x <= self.ball.radius or self.ball.x >= SCREEN_WIDTH - self.ball.radius:
+            self.ball.bounce_x()
+        
+        if self.ball.y <= self.ball.radius:
+            self.ball.bounce_y()
+        
+        # 패들과 충돌
+        if (self.ball.y >= self.paddle.y and 
+            self.ball.x >= self.paddle.x and 
+            self.ball.x <= self.paddle.x + self.paddle.width):
+            self.ball.bounce_y()
+        
+        # 바닥에 떨어짐
+        if self.ball.y >= SCREEN_HEIGHT - self.ball.radius:
+            self.lives -= 1
+            if self.lives > 0:
+                self.ball = Ball()
+            else:
+                return False
+        
+        # 벽돌과 충돌
+        for brick in self.bricks:
+            if brick.alive:
+                if (self.ball.x >= brick.x and 
+                    self.ball.x <= brick.x + brick.width and
+                    self.ball.y >= brick.y and 
+                    self.ball.y <= brick.y + brick.height):
+                    brick.alive = False
+                    self.ball.bounce_y()
+                    self.score += 10
+        
+        return True
+
+    def draw(self):
+        self.screen.fill(BLACK)
+        
+        # 객체들 그리기
+        self.ball.draw(self.screen)
+        self.paddle.draw(self.screen)
+        for brick in self.bricks:
+            brick.draw(self.screen)
+        
+        # 점수와 목숨 표시
+        score_text = self.font.render(f"Score: {self.score}", True, WHITE)
+        lives_text = self.font.render(f"Lives: {self.lives}", True, WHITE)
+        self.screen.blit(score_text, (10, 10))
+        self.screen.blit(lives_text, (SCREEN_WIDTH - 150, 10))
+        
+        pygame.display.flip()
+
+    def run(self):
+        running = True
+        while running:
+            running = self.handle_events()
+            
+            if running:
+                # 객체 움직임
+                self.ball.move()
+                self.paddle.move()
+                
+                # 충돌 검사
+                running = self.check_collisions()
+                
+                # 그리기
+                self.draw()
+                
+                # FPS 제어
+                self.clock.tick(60)
+            
+            # 게임 오버 화면
+            if not running and self.lives == 0:
+                game_over_text = self.font.render("GAME OVER", True, RED)
+                final_score_text = self.font.render(f"Final Score: {self.score}", True, WHITE)
+                self.screen.blit(game_over_text, (SCREEN_WIDTH//2 - 100, SCREEN_HEIGHT//2 - 50))
+                self.screen.blit(final_score_text, (SCREEN_WIDTH//2 - 100, SCREEN_HEIGHT//2))
+                pygame.display.flip()
+                pygame.time.wait(2000)  # 2초 대기
+                self.reset_game()
+                running = True
+
+        pygame.quit()
+
+# 게임 실행
+if __name__ == "__main__":
+    game = BrickBreaker()
+    game.run()
